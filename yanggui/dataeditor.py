@@ -710,8 +710,11 @@ class LeafNodeCtrl(SchemaNodeEntry):
         def _InitCtrl(self):
             wx.ComboBox.__init__(self, self.panel, label='[null]')
 
+        def GetNewValue(self):
+            return ''
+
         def _DisplayInstData(self, data):
-            pass          
+            pass
 
     class EnumerationNodeCtrl(LeafNodeWidget, wx.ComboBox):
         def _InitCtrl(self):
