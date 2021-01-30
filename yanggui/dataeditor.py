@@ -85,7 +85,7 @@ class SchemaNodeEntry:
                 btn = self.buttons['CreateDelete']['obj']
                 btn.Value = (data != None)
                 btn.SetToolTip(self.buttons['CreateDelete']['tooltip'][data != None])
-                if self.parent.schemaNode.mandatory:
+                if self.parent.schemaNode.mandatory and not isinstance(self.parent.nodeParent.schemaNode, yangson.schemanode.CaseNode):
                     btn.Show(data == None)
 
         def _AddButtons(self, buttons):
