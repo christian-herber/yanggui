@@ -4,8 +4,14 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name = "yang-gui",
+    version='0.0.0',
+    name = "yanggui",
     python_requires=">=3.6",
+    install_requires=[
+        'wxPython',
+        'yangson',
+        'rstr'
+    ],
     packages = ["yanggui"],
     description = "GUI tool for viewing and editing YANG instance data",
     author = "Christian Herber",
