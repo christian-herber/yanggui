@@ -47,7 +47,7 @@ class ErrorLog(wx.ListCtrl):
                     else:
                         val = 'Unkown Error'
                 elif self.columns[column] == 'path':
-                    val = str(log.path)
+                    val = log.instance.json_pointer()
                 elif self.columns[column] == 'tag':
                     val = str(log.tag)
                 elif self.columns[column] == 'message':

@@ -2,14 +2,7 @@
 #
 # SPDX-License-Identifier: LGPL-3.0-or-later
  
-import wx
-
-from .yanggui import MainFrame
-
-def main(): 
-    app = wx.App()
-    MainFrame().Show()
-    app.MainLoop()
+from .yanggui import main
 
 if __name__ == '__main__':
     main()

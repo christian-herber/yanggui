@@ -12,45 +12,53 @@ import yangson
 
 from .dsrepo import DataStoreRepo
 from .errorlog import ErrorLog
-from .dataeditor import SchemaTreeNodeCtrl
+from .dataeditor import YangPropertyGrid
+from .graphviewer import GraphViewer
 
 class MainFrame(wx.Frame):
-    def __init__(self):
+    def __init__(self, southboundIf):
         wx.Frame.__init__(self, None, title="YANG GUI")
-
+        self.Bind(wx.EVT_CLOSE, self._OnClose)
+        self.graphViewer = None
+        self.southboundIf = southboundIf
         self.splitter = wx.SplitterWindow(self, -1)
         self.splitter.SetMinimumPaneSize(20)
         self.dataEditorPanel = wx.Panel(self.splitter, -1)
-        self.errorLogPanel = wx.Panel(self.splitter, -1)
-        self.splitter.SplitHorizontally(self.dataEditorPanel, self.errorLogPanel)
-        self.splitter.SetSashPosition(-1)
+        self.utilsPanel = wx.Panel(self.splitter, -1)
+        self.splitter.SplitHorizontally(self.dataEditorPanel, self.utilsPanel)
         self.splitter.SetSashGravity(1.0)
         
-        self.dataEditor = None
+        self.utilsBook = wx.Notebook(self.utilsPanel)
+        self.errorLogPanel = wx.Panel(self.utilsBook, -1)
+        self.utilsBook.AddPage(self.errorLogPanel, 'YANG Data Error Log')
         self.errorLog = ErrorLog(self.errorLogPanel)
+        
+        self.utilsSizer = wx.BoxSizer()
+        self.utilsPanel.SetSizerAndFit(self.utilsSizer)
+        self.utilsSizer.Add(self.utilsBook, 1, wx.EXPAND)
+        
+        self.dataEditor = None
         
         self._InitUI()
 
-        self.config = wx.FileConfig(appName="YANG GUI", localFilename='.config', style=wx.CONFIG_USE_LOCAL_FILE)
+        self.config = wx.FileConfig(appName="YANG GUI", localFilename='.config', globalFilename=".config")
         self.config.EnableAutoSave()
 
         self.includes = list()
         self.dm = None
         self.inst = None
+        
+        self._LoadConfig()
+        
+        self.Layout()
 
-        self._LoadConfig()        
+    def _OnClose(self, e):
+        del self.config
+        e.Skip()
 
     def _InitUI(self):
         self.Maximize()
-
-        #self._InitToolBar()
         self.SetMenuBar(self.YangMenuBar(self))
-
-    def _InitToolBar(self):
-        toolbar = self.CreateToolBar(style=wx.TB_VERTICAL)
-        tool = toolbar.AddTool(wx.ID_ANY, 'DataStore', wx.ArtProvider.GetBitmap(wx.ART_HARDDISK))
-        tool = toolbar.AddTool(wx.ID_ANY, 'Configuration', wx.ArtProvider.GetBitmap(wx.ART_REPORT_VIEW))
-        toolbar.Realize()
 
     class YangMenuBar(wx.MenuBar):
         def __init__(self, parent):
@@ -71,15 +79,15 @@ class MainFrame(wx.Frame):
                 '&YANG': {
                     'menu' : wx.Menu(),
                     'items': {
-                        'Load Library...': {
-                            'bmp': wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN),
-                            'helpString': 'Load YANG Library',
-                            'handler': self.parent._OnLoadLibrary
-                        },
                         'Load Includes...': {
                             'bmp': wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN),
                             'helpString': 'Load YANG include paths',
                             'handler': self.parent._OnLoadIncludes
+                        },
+                        'Load Library...': {
+                            'bmp': wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN),
+                            'helpString': 'Load YANG Library',
+                            'handler': self.parent._OnLoadLibrary
                         },
                         'View Data Diff': {
                             'bmp': wx.ArtProvider.GetBitmap(wx.ART_FIND),
@@ -148,23 +156,28 @@ class MainFrame(wx.Frame):
     def _LoadLibrary(self, libraryFile):
         try:
             self.dm = yangson.DataModel.from_file(libraryFile, self.includes)
-        except:
+            self.config.Write("YANG Library", libraryFile)
+        except yangson.exceptions.YangsonException as e:
             self.dm = None
-            print("Error while loading the YANG library")
+            print("Error while loading the YANG library. Exception: {} - {}".format(str(e), type(e)))
         else:
             print('Loaded Yang Library from {}'.format(libraryFile))
             self.dsrepo = DataStoreRepo(self.dm)
+            if self.graphViewer == None:
+                self.graphViewer = GraphViewer(self.utilsBook, self.dsrepo, self.southboundIf)
+                self.utilsBook.AddPage(self.graphViewer, 'YANG Data Graphs')
+            else:
+                self.graphViewer.reset()
             self._CreateDataEditor()
+            self.dsrepo.load_raw({}) # Load empty data first, can be overwritten later through menu
             self.errorLog.SetDataStore(self.dsrepo)
-
+            
     def _LoadData(self, dataFile):
         try:
             self.dsrepo.load(dataFile)
         except:
             print("Failed to load data from {}".format(dataFile))
             self.dsrepo.load_raw({})
-        finally:
-            self.dataEditor.SetInstData(self.dsrepo.get_resource())
 
     def _OnDiffData(self, e):
         diff = self.dsrepo.diff()
@@ -174,11 +187,15 @@ class MainFrame(wx.Frame):
         dv.Show()
 
     def _CreateDataEditor(self):
-        self.Freeze()
         if self.dataEditor != None:
             self.dataEditorPanel.DestroyChildren()
-        self.dataEditor = SchemaTreeNodeCtrl(self.dataEditorPanel, None, self.dm.schema, self.dsrepo)
-        self.Thaw()
+        env = {
+            'dsrepo': self.dsrepo,
+            'southboundIf': self.southboundIf,
+            'graphViewer': self.graphViewer
+        }
+        self.dataEditor = YangPropertyGrid(self.dm.schema, self.dataEditorPanel, env)
+        self.graphViewer.set_editor(self.dataEditor)
 
     def _OnQuit(self, e):
         self.Close()
@@ -210,7 +227,6 @@ class MainFrame(wx.Frame):
         openFileDialog = wx.FileDialog(frame, "Open", "", "", "YANG Library files (*.json)|*.json", wx.FD_OPEN | wx.FD_FILE_MUST_EXIST)
         openFileDialog.ShowModal()
         self._LoadLibrary(openFileDialog.GetPath())
-        self.config.Write("YANG Library", openFileDialog.GetPath())
         openFileDialog.Destroy()
         frame.Destroy()
 
@@ -236,3 +252,8 @@ class DiffViewer(wx.Frame):
     sizer.Add(self.browser, 1, wx.EXPAND, 10) 
     self.SetSizer(sizer) 
     self.SetSize((700, 700)) 
+    
+def main(southboundIf=None): 
+    app = wx.App()
+    MainFrame(southboundIf).Show()
+    app.MainLoop()
