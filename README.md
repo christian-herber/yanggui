@@ -8,7 +8,7 @@ ABOUT
 YANG GUI is a python implemented GUI for working with YANG models and their corresponding instance data.
 The GUI based on wxPython (https://wxpython.org/), a cross-platform GUI toolkit.
 
-YANG model and data handling is done using Yangson https://yangson.labs.nic.cz/index.html. The GUI was developed using version 1.3 of Yangson. The supported features of YANG etc. are naturally a subset of the features supported by Yangson.
+YANG model and data handling is done using Yangson https://yangson.labs.nic.cz/index.html. The GUI was developed using version 1.4.4 of Yangson. The supported features of YANG etc. are naturally a subset of the features supported by Yangson.
 
 The intention of the GUI is to provide easy means of getting on overview over YANG data, YANG models, and allow also inexperienced engineers to work with YANG. 
 
@@ -23,6 +23,8 @@ The GUI supports the following high level features:
     - Store modified data to file
 - YANG error log: Error view for entire data tree
 - Diff viewer: Side-by-side comparison of intial and modified data
+- Graph support: Draw line graphs for values like counters
+- Southbound interface integration: Prepared for integration with soutbound interfaces
 
 INSTALLATION
 =============
