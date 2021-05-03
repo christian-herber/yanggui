@@ -354,6 +354,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             wxpg.PGTextCtrlEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
 
+        def CreateControls(self, propGrid, property, pos, sz):
+            wndList = super().CreateControls(propGrid, property, pos, sz)
+            if hasattr(property, 'maxLength'):
+                wndList.Primary.SetMaxLength(property.maxLength)
+            return wndList
+
     class YangListEditor(YangEditor, wxpg.PGTextCtrlEditor):
         LISTEDIT = wx.ID_HIGHEST + 20
         def __init__(self):
@@ -646,12 +652,15 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     if len(interval) == 2:
                         self.minLength = interval[0]
                         self.maxLength = interval[1]
+                        
+                        print(self.schemaNode.iname())
                     else:
                         self.minLength = interval[0]
 
     class YangBinaryProperty(YangLinearProperty):
         def __init__(self, parent, sn, sntype):
             super().__init__(parent, sn, sntype)
+            self.maxLength = self.minLength * 2 + 2 # add 2 chars for 0x prefixing, * 2 for binary to string
             # Set monospaced font
             cell = self.GetCell(0)
             font = wx.Font()
