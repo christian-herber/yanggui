@@ -646,12 +646,35 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                         self.minLength = interval[0]
 
     class YangBinaryProperty(YangLinearProperty):
+        def __init__(self, parent, sn, sntype):
+            super().__init__(parent, sn, sntype)
+            # Set monospaced font
+            cell = self.GetCell(0)
+            font = wx.Font()
+            font.SetFamily(wx.FontFamily(wx.FONTFAMILY_TELETYPE))
+            cell.SetFont(font)
+            
         def GetNewObject(self, iname=True):
             val = bytes([0] * max(self.minLength, 1))
             if iname:
                 return {self.schemaNode.iname(): val}
             else:
                 return val
+
+        def _ParseInstDataFromValue(self, value):
+            data = None
+            if value.startswith('0x'):
+                hexstr = value[2:]
+                padding = '0' * (self.minLength * 2 - len(hexstr))
+                hexstr = '{}{}'.format(padding, hexstr)
+                try:
+                    data = bytes.fromhex(hexstr)
+                except:
+                    data = None
+            return data
+
+        def _ConvertInstDataToValue(self, data):
+            return '0x{}'.format(data.value.hex())
         
     class YangStringProperty(YangLinearProperty):
         def GetDefaultData(self):
