@@ -537,9 +537,13 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             else:
                 if d == None: # data should be created
                     p = self.env['dsrepo'].get_resource(self.parent.path)
+                    if p == None:
+                        validationInfo.FailureMessage = 'Cannot assign value as the parent node does not exist. Please create the node first.'
+                        return False
                     updated = p.put_member(name=self.schemaNode.iname(), value=data)
                 else:
                     updated = d.update(data)
+                    
                 try:
                     updated.validate()
                 except:
