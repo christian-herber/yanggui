@@ -378,6 +378,49 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 return False
             return super().OnEvent(propGrid, aProperty, ctrl, event)
 
+    class YangEditorDialog(wx.Dialog):
+        def __init__(self, property):
+            self.prop = property
+            super().__init__(None, title=property.schemaNode.iname())
+            sizer = wx.BoxSizer(wx.VERTICAL)
+            data = self.prop.env['dsrepo'].get_resource(self.prop.path)
+
+            self.ctrl = self._InitMainCtrl(data)
+            sizer.Add(self.ctrl)
+
+            btns = self.CreateStdDialogButtonSizer(0)            
+            ok = wx.Button(self, wx.ID_OK, 'OK')
+            cncl = wx.Button(self, wx.ID_CANCEL, 'Cancel')
+            ok.Bind(wx.EVT_BUTTON, self.OnOk)
+            btns.Add(ok)
+            btns.Add(cncl)
+            sizer.Add(btns)
+
+            self.SetSizer(sizer)
+            sizer.Fit(self)
+
+        def OnOk(self, event):
+            d = self.prop.env['dsrepo'].get_resource(self.prop.path)
+            updated = self._GetUpdatedData(d)
+            self.prop.env['dsrepo'].commit(updated)
+            event.Skip()
+            
+        def _GetUpdatedData(self, data):
+            pass
+
+        def _InitMainCtrl(self, data):
+            pass
+            
+    class YangBitsDialog(YangEditorDialog):
+        def _InitMainCtrl(self, data):
+            choices = list(self.prop.type.bit.keys())
+            lb = wx.CheckListBox(self, choices=choices)
+            lb.SetCheckedStrings(list(data.value))
+            return lb
+
+        def _GetUpdatedData(self, data):
+            return data.update(self.lb.CheckedStrings).top()
+
     class YangBitsEditor(YangEditor, wxpg.PGTextCtrlEditor):
         BITSEDIT = wx.ID_HIGHEST + 22
         def __init__(self):
@@ -388,46 +431,30 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             if dataValid:
                 self._tooltips[self.BITSEDIT] = 'Launch editor dialog for bits data node'
                 buttons.Add("...", id=self.BITSEDIT)
-            
-        class YangBitsDialog(wx.Dialog):
-            def __init__(self, property):
-                self.prop = property
-                super().__init__(None, title=property.schemaNode.iname())
-                sizer = wx.BoxSizer(wx.VERTICAL)
-
-                data = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                
-                choices = list(self.prop.type.bit.keys())
-                self.lb = lb = wx.CheckListBox(self, choices=choices)
-                lb.SetCheckedStrings(list(data.value))
-                sizer.Add(lb)
-                btns = self.CreateStdDialogButtonSizer(0)
-
-                ok = wx.Button(self, wx.ID_OK, 'OK')
-                cncl = wx.Button(self, wx.ID_CANCEL, 'Cancel')
-                ok.Bind(wx.EVT_BUTTON, self.OnDialog)
-                
-                btns.Add(ok)
-                btns.Add(cncl)
-
-                sizer.Add(btns)
-                self.SetSizer(sizer)
-                sizer.Fit(self)
-
-            def OnDialog(self, event):
-                data = self.lb.CheckedStrings
-                d = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                updated = d.update(data).top()
-                self.prop.env['dsrepo'].commit(updated)
-                event.Skip()
-
         def OnEvent(self, propGrid, aProperty, ctrl, event):
             if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.BITSEDIT):
-                d = self.YangBitsDialog(aProperty)
+                d = YangPropertyGrid.YangBitsDialog(aProperty)
                 d.ShowModal()
                 d.Destroy()
                 return False
             return super().OnEvent(propGrid, aProperty, ctrl, event)
+            
+    class YangLeafListDialog(YangEditorDialog):
+        def _InitMainCtrl(self, data):
+            lb = wx.adv.EditableListBox(self)
+            strings = list()
+            for value in data.value:
+                str = self.prop.type.canonical_string(value)
+                strings.append(str)
+            lb.SetStrings(strings)
+            return lb
+
+        def _GetUpdatedData(self, data):
+            strings = self.ctrl.GetStrings()
+            values = list()
+            for string in strings:
+                values.append(self.prop.type.parse_value(string))
+            return data.update(yangson.instvalue.ArrayValue(val=values)).top()
 
     class YangLeafListEditor(YangEditor, wxpg.PGTextCtrlEditor):
         LEAFLISTEDIT = wx.ID_HIGHEST + 21
@@ -439,48 +466,10 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             if dataValid:
                 self._tooltips[self.LEAFLISTEDIT] = 'Launch editor dialog for this leaf list'
                 buttons.Add("...", id=self.LEAFLISTEDIT)
-            
-        class YangLeafListDialog(wx.Dialog):
-            def __init__(self, property):
-                self.prop = property
-                super().__init__(None, title=property.schemaNode.iname())
-                sizer = wx.BoxSizer(wx.VERTICAL)
-
-                data = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                self.lb = lb = wx.adv.EditableListBox(self)
-                strings = list()
-                for value in data.value:
-                    str = self.prop.type.canonical_string(value)
-                    strings.append(str)
-                lb.SetStrings(strings)
-                sizer.Add(lb)
-
-                btns = self.CreateStdDialogButtonSizer(0)
-
-                ok = wx.Button(self, wx.ID_OK, 'OK')
-                cncl = wx.Button(self, wx.ID_CANCEL, 'Cancel')
-                ok.Bind(wx.EVT_BUTTON, self.OnDialog)
-                
-                btns.Add(ok)
-                btns.Add(cncl)
-
-                sizer.Add(btns)
-                self.SetSizer(sizer)
-                sizer.Fit(self)
-
-            def OnDialog(self, event):
-                strings = self.lb.GetStrings()
-                values = list()
-                for string in strings:
-                    values.append(self.prop.type.parse_value(string))
-                d = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                updated = d.update(yangson.instvalue.ArrayValue(val=values)).top()
-                self.prop.env['dsrepo'].commit(updated)
-                event.Skip()
 
         def OnEvent(self, propGrid, aProperty, ctrl, event):
             if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.LEAFLISTEDIT):
-                d = self.YangLeafListDialog(aProperty)
+                d = YangPropertyGrid.YangLeafListDialog(aProperty)
                 d.ShowModal()
                 d.Destroy()
                 return False
