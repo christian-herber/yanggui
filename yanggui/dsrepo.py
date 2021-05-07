@@ -126,9 +126,22 @@ class DataStoreRepo:
                 self._find_all_errors(entry)
         
         if isinstance(node, yangson.instance.RootNode):
-            self.errorLog = list(set(self.errorLog)) # remove duplicates
+            self._removeDuplicates()
+            self.errorLog = list(set(self.errorLog))
             self.errorLog = sorted(self.errorLog , key=lambda log: log.instance.path)
             self._notify_error_log_cbs()
+            
+    def _removeDuplicates(self):
+        errorLogClean = list()
+        for error in self.errorLog:
+            seen = False
+            for errorClean in errorLogClean:
+                if str(error) == str(errorClean):
+                    seen = True
+                    break
+            if not seen:
+                errorLogClean.append(error)
+        self.errorLog = errorLogClean
             
     def _notify_error_log_cbs(self):
         for cb in self.error_log_callbacks:

@@ -222,7 +222,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 
             if (property.env['southboundIf'] != None) and (property.env['southboundIf'].resources != None):
                 if property.schemaNode.data_path() in property.env['southboundIf'].resources:
-                    if not property.schemaNode.config and dataValid:
+                    if property.schemaNode.config and dataValid:
                         buttons.AddButton("P", id=self.PUT)
                     buttons.AddButton("G", id=self.GET)
             if dataValid:
@@ -354,6 +354,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             wxpg.PGTextCtrlEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
 
+        def CreateControls(self, propGrid, property, pos, sz):
+            wndList = super().CreateControls(propGrid, property, pos, sz)
+            if hasattr(property, 'maxLength'):
+                wndList.Primary.SetMaxLength(property.maxLength)
+            return wndList
+
     class YangListEditor(YangEditor, wxpg.PGTextCtrlEditor):
         LISTEDIT = wx.ID_HIGHEST + 20
         def __init__(self):
@@ -372,6 +378,49 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 return False
             return super().OnEvent(propGrid, aProperty, ctrl, event)
 
+    class YangEditorDialog(wx.Dialog):
+        def __init__(self, property):
+            self.prop = property
+            super().__init__(None, title=property.schemaNode.iname())
+            sizer = wx.BoxSizer(wx.VERTICAL)
+            data = self.prop.env['dsrepo'].get_resource(self.prop.path)
+
+            self.ctrl = self._InitMainCtrl(data)
+            sizer.Add(self.ctrl)
+
+            btns = self.CreateStdDialogButtonSizer(0)            
+            ok = wx.Button(self, wx.ID_OK, 'OK')
+            cncl = wx.Button(self, wx.ID_CANCEL, 'Cancel')
+            ok.Bind(wx.EVT_BUTTON, self.OnOk)
+            btns.Add(ok)
+            btns.Add(cncl)
+            sizer.Add(btns)
+
+            self.SetSizer(sizer)
+            sizer.Fit(self)
+
+        def OnOk(self, event):
+            d = self.prop.env['dsrepo'].get_resource(self.prop.path)
+            updated = self._GetUpdatedData(d)
+            self.prop.env['dsrepo'].commit(updated)
+            event.Skip()
+            
+        def _GetUpdatedData(self, data):
+            pass
+
+        def _InitMainCtrl(self, data):
+            pass
+            
+    class YangBitsDialog(YangEditorDialog):
+        def _InitMainCtrl(self, data):
+            choices = list(self.prop.type.bit.keys())
+            lb = wx.CheckListBox(self, choices=choices)
+            lb.SetCheckedStrings(list(data.value))
+            return lb
+
+        def _GetUpdatedData(self, data):
+            return data.update(self.lb.CheckedStrings).top()
+
     class YangBitsEditor(YangEditor, wxpg.PGTextCtrlEditor):
         BITSEDIT = wx.ID_HIGHEST + 22
         def __init__(self):
@@ -382,46 +431,30 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             if dataValid:
                 self._tooltips[self.BITSEDIT] = 'Launch editor dialog for bits data node'
                 buttons.Add("...", id=self.BITSEDIT)
-            
-        class YangBitsDialog(wx.Dialog):
-            def __init__(self, property):
-                self.prop = property
-                super().__init__(None, title=property.schemaNode.iname())
-                sizer = wx.BoxSizer(wx.VERTICAL)
-
-                data = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                
-                choices = list(self.prop.type.bit.keys())
-                self.lb = lb = wx.CheckListBox(self, choices=choices)
-                lb.SetCheckedStrings(list(data.value))
-                sizer.Add(lb)
-                btns = self.CreateStdDialogButtonSizer(0)
-
-                ok = wx.Button(self, wx.ID_OK, 'OK')
-                cncl = wx.Button(self, wx.ID_CANCEL, 'Cancel')
-                ok.Bind(wx.EVT_BUTTON, self.OnDialog)
-                
-                btns.Add(ok)
-                btns.Add(cncl)
-
-                sizer.Add(btns)
-                self.SetSizer(sizer)
-                sizer.Fit(self)
-
-            def OnDialog(self, event):
-                data = self.lb.CheckedStrings
-                d = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                updated = d.update(data).top()
-                self.prop.env['dsrepo'].commit(updated)
-                event.Skip()
-
         def OnEvent(self, propGrid, aProperty, ctrl, event):
             if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.BITSEDIT):
-                d = self.YangBitsDialog(aProperty)
+                d = YangPropertyGrid.YangBitsDialog(aProperty)
                 d.ShowModal()
                 d.Destroy()
                 return False
             return super().OnEvent(propGrid, aProperty, ctrl, event)
+            
+    class YangLeafListDialog(YangEditorDialog):
+        def _InitMainCtrl(self, data):
+            lb = wx.adv.EditableListBox(self)
+            strings = list()
+            for value in data.value:
+                str = self.prop.type.canonical_string(value)
+                strings.append(str)
+            lb.SetStrings(strings)
+            return lb
+
+        def _GetUpdatedData(self, data):
+            strings = self.ctrl.GetStrings()
+            values = list()
+            for string in strings:
+                values.append(self.prop.type.parse_value(string))
+            return data.update(yangson.instvalue.ArrayValue(val=values)).top()
 
     class YangLeafListEditor(YangEditor, wxpg.PGTextCtrlEditor):
         LEAFLISTEDIT = wx.ID_HIGHEST + 21
@@ -433,48 +466,10 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             if dataValid:
                 self._tooltips[self.LEAFLISTEDIT] = 'Launch editor dialog for this leaf list'
                 buttons.Add("...", id=self.LEAFLISTEDIT)
-            
-        class YangLeafListDialog(wx.Dialog):
-            def __init__(self, property):
-                self.prop = property
-                super().__init__(None, title=property.schemaNode.iname())
-                sizer = wx.BoxSizer(wx.VERTICAL)
-
-                data = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                self.lb = lb = wx.adv.EditableListBox(self)
-                strings = list()
-                for value in data.value:
-                    str = self.prop.type.canonical_string(value)
-                    strings.append(str)
-                lb.SetStrings(strings)
-                sizer.Add(lb)
-
-                btns = self.CreateStdDialogButtonSizer(0)
-
-                ok = wx.Button(self, wx.ID_OK, 'OK')
-                cncl = wx.Button(self, wx.ID_CANCEL, 'Cancel')
-                ok.Bind(wx.EVT_BUTTON, self.OnDialog)
-                
-                btns.Add(ok)
-                btns.Add(cncl)
-
-                sizer.Add(btns)
-                self.SetSizer(sizer)
-                sizer.Fit(self)
-
-            def OnDialog(self, event):
-                strings = self.lb.GetStrings()
-                values = list()
-                for string in strings:
-                    values.append(self.prop.type.parse_value(string))
-                d = self.prop.env['dsrepo'].get_resource(self.prop.path)
-                updated = d.update(yangson.instvalue.ArrayValue(val=values)).top()
-                self.prop.env['dsrepo'].commit(updated)
-                event.Skip()
 
         def OnEvent(self, propGrid, aProperty, ctrl, event):
             if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.LEAFLISTEDIT):
-                d = self.YangLeafListDialog(aProperty)
+                d = YangPropertyGrid.YangLeafListDialog(aProperty)
                 d.ShowModal()
                 d.Destroy()
                 return False
@@ -537,9 +532,13 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             else:
                 if d == None: # data should be created
                     p = self.env['dsrepo'].get_resource(self.parent.path)
+                    if p == None:
+                        validationInfo.FailureMessage = 'Cannot assign value as the parent node does not exist. Please create the node first.'
+                        return False
                     updated = p.put_member(name=self.schemaNode.iname(), value=data)
                 else:
                     updated = d.update(data)
+                    
                 try:
                     updated.validate()
                 except:
@@ -642,16 +641,42 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     if len(interval) == 2:
                         self.minLength = interval[0]
                         self.maxLength = interval[1]
+                        
+                        print(self.schemaNode.iname())
                     else:
                         self.minLength = interval[0]
 
     class YangBinaryProperty(YangLinearProperty):
+        def __init__(self, parent, sn, sntype):
+            super().__init__(parent, sn, sntype)
+            self.maxLength = self.minLength * 2 + 2 # add 2 chars for 0x prefixing, * 2 for binary to string
+            # Set monospaced font
+            cell = self.GetCell(0)
+            font = wx.Font()
+            font.SetFamily(wx.FontFamily(wx.FONTFAMILY_TELETYPE))
+            cell.SetFont(font)
+            
         def GetNewObject(self, iname=True):
             val = bytes([0] * max(self.minLength, 1))
             if iname:
                 return {self.schemaNode.iname(): val}
             else:
                 return val
+
+        def _ParseInstDataFromValue(self, value):
+            data = None
+            if value.startswith('0x'):
+                hexstr = value[2:]
+                padding = '0' * (self.minLength * 2 - len(hexstr))
+                hexstr = '{}{}'.format(padding, hexstr)
+                try:
+                    data = bytes.fromhex(hexstr)
+                except:
+                    data = None
+            return data
+
+        def _ConvertInstDataToValue(self, data):
+            return '0x{}'.format(data.value.hex())
         
     class YangStringProperty(YangLinearProperty):
         def GetDefaultData(self):
