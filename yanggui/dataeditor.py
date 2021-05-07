@@ -222,7 +222,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 
             if (property.env['southboundIf'] != None) and (property.env['southboundIf'].resources != None):
                 if property.schemaNode.data_path() in property.env['southboundIf'].resources:
-                    if not property.schemaNode.config and dataValid:
+                    if property.schemaNode.config and dataValid:
                         buttons.AddButton("P", id=self.PUT)
                     buttons.AddButton("G", id=self.GET)
             if dataValid:
