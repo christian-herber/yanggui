@@ -419,7 +419,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return lb
 
         def _GetUpdatedData(self, data):
-            return data.update(self.lb.CheckedStrings).top()
+            return data.update(self.ctrl.CheckedStrings).top()
 
     class YangBitsEditor(YangEditor, wxpg.PGTextCtrlEditor):
         BITSEDIT = wx.ID_HIGHEST + 22
@@ -641,8 +641,6 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     if len(interval) == 2:
                         self.minLength = interval[0]
                         self.maxLength = interval[1]
-                        
-                        print(self.schemaNode.iname())
                     else:
                         self.minLength = interval[0]
 
