@@ -213,7 +213,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
         def CreateControls(self, propGrid, property, pos, sz):
             buttons = wxpg.PGMultiButton(propGrid, sz)
             dataValid = (property.env['dsrepo'].get_resource(property.path) != None)
-            self._AddCustomButtons(buttons, dataValid)
+            self._AddCustomButtons(buttons, dataValid, property)
             if dataValid:
                 if not property.schemaNode.mandatory:
                     buttons.AddBitmapButton(wx.ArtProvider.GetBitmap(wx.ART_MINUS), id=self.DELETE)
@@ -242,7 +242,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
 
             return wxpg.PGWindowList(wndList.GetPrimary(), buttons)
 
-        def _AddCustomButtons(self, buttons, dataValid):
+        def _AddCustomButtons(self, buttons, dataValid, property):
             pass
 
         class AdvancedMenu(wx.Menu):
@@ -362,19 +362,35 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
 
     class YangListEditor(YangEditor, wxpg.PGTextCtrlEditor):
         LISTEDIT = wx.ID_HIGHEST + 20
+        LISTNEXT = wx.ID_HIGHEST + 21
+        LISTPREVIOUS = wx.ID_HIGHEST + 22
         def __init__(self):
             wxpg.PGTextCtrlEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
 
-        def _AddCustomButtons(self, buttons, dataValid):
+        def _AddCustomButtons(self, buttons, dataValid, property):
             if dataValid:
                 self._tooltips[self.LISTEDIT] = 'Launch viewer for this list'
                 buttons.Add("...", id=self.LISTEDIT)
+                if property.index > 0:
+                    self._tooltips[self.LISTPREVIOUS] = 'Select previous entry in this list'
+                    buttons.Add("<", id=self.LISTPREVIOUS)
+                if property.index < property.max_index:
+                    self._tooltips[self.LISTNEXT] = 'Select next entry in this list'
+                    buttons.Add(">", id=self.LISTNEXT)
 
         def OnEvent(self, propGrid, aProperty, ctrl, event):
             if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.LISTEDIT):
                 lv = YangListViewer(aProperty)
                 lv.Show()
+                return False
+            if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.LISTNEXT):
+                aProperty.Select(aProperty.index + 1)
+                aProperty.RecreateEditor()
+            if (event.GetEventType() == wx.wxEVT_BUTTON) and (event.GetId() == self.LISTPREVIOUS):
+                aProperty.Select(aProperty.index - 1)
+                aProperty.RecreateEditor()
+                
                 return False
             return super().OnEvent(propGrid, aProperty, ctrl, event)
 
@@ -422,12 +438,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return data.update(self.ctrl.CheckedStrings).top()
 
     class YangBitsEditor(YangEditor, wxpg.PGTextCtrlEditor):
-        BITSEDIT = wx.ID_HIGHEST + 22
+        BITSEDIT = wx.ID_HIGHEST + 30
         def __init__(self):
             wxpg.PGTextCtrlEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
 
-        def _AddCustomButtons(self, buttons, dataValid):
+        def _AddCustomButtons(self, buttons, dataValid, property):
             if dataValid:
                 self._tooltips[self.BITSEDIT] = 'Launch editor dialog for bits data node'
                 buttons.Add("...", id=self.BITSEDIT)
@@ -457,12 +473,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return data.update(yangson.instvalue.ArrayValue(val=values)).top()
 
     class YangLeafListEditor(YangEditor, wxpg.PGTextCtrlEditor):
-        LEAFLISTEDIT = wx.ID_HIGHEST + 21
+        LEAFLISTEDIT = wx.ID_HIGHEST + 31
         def __init__(self):
             wxpg.PGTextCtrlEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
 
-        def _AddCustomButtons(self, buttons, dataValid):
+        def _AddCustomButtons(self, buttons, dataValid, property):
             if dataValid:
                 self._tooltips[self.LEAFLISTEDIT] = 'Launch editor dialog for this leaf list'
                 buttons.Add("...", id=self.LEAFLISTEDIT)
@@ -846,6 +862,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
     class YangListProperty(YangInternalProperty):
         def __init__(self, parent, sn):
             self.index = 0
+            self.max_index = 0
             super().__init__(parent, sn)
 
         def _SetEditor(self):
@@ -862,8 +879,9 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             self.RefreshInstData()
 
         def Select(self, index):
-            self.index = index
-            self.RefreshInstData()
+            if index >= 0 and index <= self.max_index:
+                self.index = index
+                self.RefreshInstData()
 
         def RefreshInstData(self):
             data = self.env['dsrepo'].get_resource(self.listPath)
@@ -880,6 +898,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             self.DisplayYangEntryInstData(data)
 
         def DisplayYangEntryInstData(self, data):
+            self.max_index = len(data.parinst.value) - 1
             super().DisplayYangInstData(data)
             
         def DisplayYangInstData(self, data):
