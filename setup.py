@@ -4,12 +4,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    version='0.1.1',
+    version='0.1.2',
     name = "yanggui",
     python_requires=">=3.6",
     install_requires=[
         'wxPython>=4.1',
-        'yangson>=1.4',
+        'yangson>=1.4.9',
         'rstr>=2.2',
         'PyPubSub>=4',
     ],
