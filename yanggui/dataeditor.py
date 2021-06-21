@@ -261,14 +261,30 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                         'create': False,
                         'tooltip': 'Add to graph',
                         'cb': self._OnAddToGraph
+                    },
+                    'GET_LIST': {
+                        'kind': wx.ITEM_NORMAL,
+                        'create': False,
+                        'tooltip': 'GET entire list',
+                        'cb': self._OnGetList
+                    },
+                    'PUT_LIST': {
+                        'kind': wx.ITEM_NORMAL,
+                        'create': False,
+                        'tooltip': 'PUT entire list',
+                        'cb': self._OnPutList
                     }
                 }
                 if isinstance(prop.schemaNode, yangson.schemanode.LeafNode) and isinstance(prop.schemaNode.type, yangson.datatype.NumericType):
                     self.items['ADD_TO_GRAPH']['create'] = True
                 if (prop.env['southboundIf'] != None) and (prop.env['southboundIf'].resources != None):
                     if prop.schemaNode.data_path() in prop.env['southboundIf'].resources:
-                        if not prop.schemaNode.config:
-                            self.items['GET_LOOP']['create'] = True
+                        self.items['GET_LOOP']['create'] = True
+                        if prop.schemaNode.config:
+                            if isinstance(prop.schemaNode, yangson.schemanode.ListNode):
+                                self.items['PUT_LIST']['create'] = True
+                        if isinstance(prop.schemaNode, yangson.schemanode.ListNode):
+                            self.items['GET_LIST']['create'] = True
 
                 self._AddItems()
                 self._ShowAdvancedOptions()
@@ -307,6 +323,18 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     self.prop.env['graphViewer'].add(self.prop.path, self.prop.topic)
                 else:
                     self.prop.env['graphViewer'].remove(self.prop.topic)
+
+            def _OnPutList(self, e):
+                data = self.prop.env['dsrepo'].get_resource(self.prop.listPath)
+                if self.prop.env['southboundIf'] != None:
+                    self.prop.env['southboundIf'].put(self.prop.env['dsrepo'].dm, data, self.prop.listPath)
+
+            def _OnGetList(self, e):
+                if self.prop.env['southboundIf'] != None:
+                    data = self.prop.env['dsrepo'].get_resource(self.prop.listPath)
+                    data = self.prop.env['southboundIf'].get(self.prop.env['dsrepo'].dm, data, self.prop.listPath)
+                    if data != None:
+                        self.prop.env['dsrepo'].commit(data.top())                    
 
         def OnEvent(self, propGrid, aProperty, ctrl, event):
             if event.GetEventType() == wx.wxEVT_BUTTON:
