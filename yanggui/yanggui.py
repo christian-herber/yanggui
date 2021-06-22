@@ -16,8 +16,13 @@ from .dataeditor import YangPropertyGrid
 from .graphviewer import GraphViewer
 
 class MainFrame(wx.Frame):
-    def __init__(self, southboundIf):
-        wx.Frame.__init__(self, None, title="YANG GUI")
+    def __init__(self, southboundIf, title, icon):
+        wx.Frame.__init__(self, None, title=title)
+        
+        if icon != None:
+            ic = wx.Icon(name=icon, type=wx.BITMAP_TYPE_ICO)
+            self.SetIcon(ic)
+        
         self.Bind(wx.EVT_CLOSE, self._OnClose)
         self.graphViewer = None
         self.southboundIf = southboundIf
@@ -253,7 +258,7 @@ class DiffViewer(wx.Frame):
     self.SetSizer(sizer) 
     self.SetSize((700, 700)) 
     
-def main(southboundIf=None): 
+def main(southboundIf=None, title="YANG GUI", icon=None): 
     app = wx.App()
-    MainFrame(southboundIf).Show()
+    MainFrame(southboundIf, title, icon).Show()
     app.MainLoop()
