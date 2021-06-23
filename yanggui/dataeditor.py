@@ -926,7 +926,9 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             self.DisplayYangEntryInstData(data)
 
         def DisplayYangEntryInstData(self, data):
-            self.max_index = len(data.parinst.value) - 1
+            self.max_index = -1
+            if data != None:
+                self.max_index = len(data.parinst.value) - 1
             super().DisplayYangInstData(data)
             
         def DisplayYangInstData(self, data):
@@ -1132,9 +1134,10 @@ class YangListViewer(wx.Frame):
                 updated = d.insert_before(value=value).top()
             else:
                 updated = d.insert_after(value=value).top()
+            self.property.max_index += 1
+            self.env['dsrepo'].commit(updated)
         else:
-            updated = self.property.Create()
-        self.env['dsrepo'].commit(updated)
+            self.property.Create()
 
     def _OnDeleteSelected(self, e):
         item = self.list.GetFirstSelected()
@@ -1145,6 +1148,7 @@ class YangListViewer(wx.Frame):
             item = self.list.GetNextSelected(item)
         for item in sorted(remove, reverse=True):
             updatedValue = updatedValue.delete_item(item)
+        self.property.max_index -= len(remove)
         self.env['dsrepo'].commit(updatedValue.top())
 
     def RefreshInstData(self):
