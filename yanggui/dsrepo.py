@@ -171,6 +171,8 @@ class DataStoreRepo:
             return None
         d = self.datastores[name]
         for index in path:
+            if d == None:
+                return None
             if isinstance(d.value, yangson.instvalue.ArrayValue):
                 if 0 <= index < len(d.value):
                     d = d[index]
