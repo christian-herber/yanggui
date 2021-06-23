@@ -655,7 +655,11 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 return obj
 
         def GetDefaultData(self):
-            return self._ParseInstDataFromValue(self.GetDefaultValue())
+            if hasattr(self.schemaNode, 'default') and self.schemaNode.default != None:
+                data = self.schemaNode.default
+            else:
+                data = self._ParseInstDataFromValue(self.GetDefaultValue())
+            return data
             
         def ConvertDataToObject(self, data):
             return data
@@ -789,7 +793,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             self.SetEditor("YangChoiceEditor")
             self.SetValueToUnspecified()
 
-        def GetDefaultData(self):
+        def GetDefaultValue(self):
             return False
 
         def _ParseInstDataFromValue(self, value):
