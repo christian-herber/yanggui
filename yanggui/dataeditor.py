@@ -222,9 +222,10 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 
             if (property.env['southboundIf'] != None) and (property.env['southboundIf'].resources != None):
                 if property.schemaNode.data_path() in property.env['southboundIf'].resources:
-                    if property.schemaNode.config and dataValid:
-                        buttons.AddButton("P", id=self.PUT)
                     buttons.AddButton("G", id=self.GET)
+                    if dataValid:
+                        if property.schemaNode.config:
+                            buttons.AddButton("P", id=self.PUT)
             if dataValid:
                 buttons.AddButton("ADV", id=self.ADVANCED)
             wndList = super().CreateControls(
@@ -349,6 +350,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     self.Put(aProperty)
                 elif evtId == self.GET:
                     self.Get(aProperty)
+                    aProperty.RecreateEditor()
                 elif evtId == self.ADVANCED:
                     self.AdvancedMenu(aProperty)
                 return False
@@ -363,6 +365,9 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
         def Get(self, prop):
             if prop.env['southboundIf'] != None:
                 data = prop.env['dsrepo'].get_resource(prop.path)
+                if data == None:
+                    prop.Create()
+                    data = prop.env['dsrepo'].get_resource(prop.path)
                 data = prop.env['southboundIf'].get(prop.env['dsrepo'].dm, data, prop.path)
                 if data != None:
                     prop.env['dsrepo'].commit(data.top())
