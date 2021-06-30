@@ -152,13 +152,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             (yangson.datatype.IntegralType, YangPropertyGrid.YangIntegralProperty),
             (yangson.datatype.Decimal64Type, YangPropertyGrid.YangDecimal64Property),
             (yangson.datatype.EmptyType, YangPropertyGrid.YangEmptyProperty),
+            (yangson.datatype.LeafrefType, YangPropertyGrid.YangLeafrefProperty),
             (yangson.datatype.InstanceIdentifierType, YangPropertyGrid.YangGenericProperty)
         ]
 
         if isinstance(leaf.type, yangson.datatype.UnionType):
             nodeType = leaf.type.types[0]
-        elif isinstance(leaf.type, yangson.datatype.LeafrefType):
-            nodeType = leaf.type.ref_type
         else:
             nodeType = leaf.type
         for propClass in leafLookup:
@@ -376,6 +375,24 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
         def __init__(self):
             wxpg.PGChoiceEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
+
+        def CreateControls(self, propGrid, property, pos, sz):
+            if isinstance(property.schemaNode.type, yangson.datatype.LeafrefType):
+                choices = ['']
+                values = [0]
+                d = property.env['dsrepo'].get_resource(property.path)
+                if d != None:
+                    ns = property.schemaNode.type.path.evaluate(d)
+                    for idx, obj in enumerate(ns):
+                        choices.append(property.schemaNode.type.canonical_string(obj.value))
+                        values.append(idx + 1)
+                if choices != property.choices:
+                    property.choices = choices
+                    print(choices)
+                    print(values)
+                    property.SetChoices(wxpg.PGChoices(choices, values))
+            wndList = super().CreateControls(propGrid, property, pos, sz)
+            return wndList
 
     class YangSpinCtrlEditor(YangEditor, wxpg.PGSpinCtrlEditor):
         def __init__(self):
@@ -777,7 +794,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 return super()._ParseInstDataFromValue(self.choices[value])
 
         def GetDefaultValue(self):
-            return 1
+            return 1 if len(self.choices) > 1 else 0
 
     class YangEnumerationProperty(YangChoiceProperty):
         def GetChoices(self, sntype):
@@ -788,6 +805,11 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             choices = ['']
             for choice in list(sntype.sctx.schema_data.derived_from_all(sntype.bases)):
                 choices.append(sntype.canonical_string(choice))
+            return choices
+
+    class YangLeafrefProperty(YangChoiceProperty):
+        def GetChoices(self, sntype):
+            choices = ['']
             return choices
 
     class YangBooleanProperty(wxpg.BoolProperty, YangPropertyBase):
