@@ -748,12 +748,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return '0x{}'.format(data.value.hex())
         
     class YangStringProperty(YangLinearProperty):
-        def GetDefaultData(self):
+        def GetDefaultValue(self):
             if hasattr(self.type, 'patterns') and len(self.type.patterns) > 0:
-                data = rstr.xeger(self.type.patterns[0].regex)
+                value = rstr.xeger(self.type.patterns[0].regex)
             else:
-                data = rstr.rstr('x', self.minLength)
-            return data
+                value = rstr.rstr('x', self.minLength)
+            return value
         
         def _ParseInstDataFromValue(self, value):
             if value == "":
@@ -777,7 +777,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 if isinstance(self.type.range, yangson.constraint.Intervals):
                     self.default = self.type.range.intervals[0][0]
 
-        def GetDefaultData(self):
+        def GetDefaultValue(self):
             return self.default
         
     class YangChoiceProperty(wxpg.EnumProperty, YangPropertyBase):
@@ -844,8 +844,8 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return json.dumps(data.value)
 
     class YangDecimal64Property(YangGenericProperty):
-        def GetDefaultData(self):
-            return 0.0
+        def GetDefaultValue(self):
+            return "0.0"
 
     class YangInternalProperty(wxpg.StringProperty, YangPropertyBase):
         def __init__(self, parent, sn):
