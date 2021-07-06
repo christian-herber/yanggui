@@ -174,6 +174,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             prop = YangPropertyGrid._CreateChildProperty(self, child)
             if prop != None:
                 self.AddPrivateChild(prop)
+                self.childProperties[child.iname()] = prop
 
     def _CreateChildProperty(self, child):
         prop = None
@@ -852,6 +853,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             super().__init__(label=self.label, name=self.name)
             YangPropertyGrid.YangPropertyBase.__init__(self, parent, sn, None)
             self._SetEditor()
+            self.childProperties = dict()
             YangPropertyGrid._AddChildrenToParentProperty(self, self.schemaNode.data_children())
             self.SetValueToUnspecified()
         
@@ -888,9 +890,20 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return True
         
         def _ConvertInstDataToValue(self, data):
-            value = str(data.value)
-            if len(value) > 100:
-                value = value[0:100].rsplit(',', 1)[0] + ' ...}'
+            if data != None:
+                value = '{'
+                for iname in data:
+                    child_value = self.childProperties[iname]._ConvertInstDataToValue(data[iname])
+                    value = '{}{}: {}, '.format(value, iname, child_value)
+                    if(len(value) > 100):
+                        break
+                if(len(value) > 100):
+                    value = value[0:100].rsplit(',', 1)[0] + ' ...'
+                else:
+                    value = value.rsplit(',', 1)[0]
+                value = value + '}'
+            else:
+                value = ''
             return value
 
     class YangLeafListProperty(wxpg.StringProperty, YangPropertyBase):
@@ -999,7 +1012,27 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return True
         
         def _ConvertInstDataToValue(self, data):
-            return self.index # just return the currently selected index to be displayed
+            if isinstance(data, yangson.instance.ArrayEntry):
+                return YangPropertyGrid.YangContainerProperty._ConvertInstDataToValue(self, data)
+            else:
+                if data == None:
+                    return ''
+                elif len(data.value) == 0:
+                    return '[]'
+                else:
+                    keys = data.schema_node.keys
+                    entries = list()
+                    indeces = set([0])
+                    indeces.add(len(data.value) - 1)
+                    for idx in indeces:
+                        keyvals = []
+                        for key in keys:
+                            keyvals.append(str(data[idx][key[0]].value))
+                        entry = '({})'.format(', '.join(keyvals))
+                        entries.append(entry)
+                    sep = ', ' if len(data.value) == 2 else ', ..., '
+                    value = '[{}]'.format(sep.join(entries))
+                return value
 
         def SetInitialPath(self):
             iname = self.schemaNode.iname()
@@ -1010,6 +1043,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
 class YangListViewer(wx.Frame):
     def __init__(self, aProperty):
         self.property = aProperty
+        self.propertyGrid = aProperty.GetGrid()
         self.nodeParent = aProperty.parent
         self.schemaNode = aProperty.schemaNode
         self.env = aProperty.env
@@ -1062,16 +1096,10 @@ class YangListViewer(wx.Frame):
             path = self.parent.path + (item,)
             d = self.parent.env['dsrepo'].get_resource(path)
             if d != None:
-                if len(self.columns) == 1:
-                    value = str(d)
-                elif self.columns[column] in d:
+                if self.columns[column] in d:
                     obj = d[self.columns[column]]
-                    if isinstance(obj.schema_node, yangson.schemanode.LeafNode):
-                        value = str(obj)  # TODO use cannonical string
-                    elif isinstance(obj.schema_node, yangson.schemanode.SequenceNode):
-                        value = str((len(obj.value)))
-                    else:
-                        value = 'present'
+                    prop = self.parent.property.childProperties[obj.schema_node.iname()]
+                    value = str(prop._ConvertInstDataToValue(obj))
             return value
 
         def _OnSelectEvent(self, e):
@@ -1180,6 +1208,7 @@ class YangListViewer(wx.Frame):
         for item in sorted(remove, reverse=True):
             updatedValue = updatedValue.delete_item(item)
         self.property.max_index -= len(remove)
+        self.property.Select(self.property.index - 1)
         self.env['dsrepo'].commit(updatedValue.top())
 
     def RefreshInstData(self):
