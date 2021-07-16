@@ -16,6 +16,19 @@ def _AppendNodeToPath(path, iname):
     l.append(iname)
     return tuple(l)
 
+def _GetLeafRefChoices(property):
+    choices = ['']
+    values = [0]
+    d = property.env['dsrepo'].get_resource(property.path)
+    if d != None:
+        ns = property.type.path.evaluate(d)
+        for idx, obj in enumerate(ns):
+            choices.append(property.type.canonical_string(obj.value))
+            values.append(idx + 1)
+    
+        property.choices = choices
+    return choices, values
+
 def _CreateNodeLabel(node):
     # Create labels insipred by https://tools.ietf.org/html/rfc8340
     label = 'rw ' if node.config == True else 'ro '
@@ -379,19 +392,8 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
 
         def CreateControls(self, propGrid, property, pos, sz):
             if isinstance(property.schemaNode.type, yangson.datatype.LeafrefType):
-                choices = ['']
-                values = [0]
-                d = property.env['dsrepo'].get_resource(property.path)
-                if d != None:
-                    ns = property.schemaNode.type.path.evaluate(d)
-                    for idx, obj in enumerate(ns):
-                        choices.append(property.schemaNode.type.canonical_string(obj.value))
-                        values.append(idx + 1)
-                if choices != property.choices:
-                    property.choices = choices
-                    print(choices)
-                    print(values)
-                    property.SetChoices(wxpg.PGChoices(choices, values))
+                choices, values = _GetLeafRefChoices(property)
+                property.SetChoices(wxpg.PGChoices(choices, values))
             wndList = super().CreateControls(propGrid, property, pos, sz)
             return wndList
 
@@ -508,16 +510,34 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             
     class YangLeafListDialog(YangEditorDialog):
         def _InitMainCtrl(self, data):
-            lb = wx.adv.EditableListBox(self)
+            sizer = wx.BoxSizer(wx.VERTICAL)
+            self.lb = lb = wx.adv.EditableListBox(self)
+            sizer.Add(lb)
+            if isinstance(self.prop.type, yangson.datatype.LeafrefType):
+                choices, values = _GetLeafRefChoices(self.prop)
+                self.cb = cb = wx.ComboBox(self, style=wx.CB_READONLY, choices=choices)
+                sizer.Add(cb, 0, wx.EXPAND)
+                cb.Bind(wx.EVT_COMBOBOX, self.OnCBSelect)
             strings = list()
             for value in data.value:
                 str = self.prop.type.canonical_string(value)
                 strings.append(str)
             lb.SetStrings(strings)
-            return lb
+            return sizer
+        
+        def OnCBSelect(self, e):
+            val = e.GetString()
+            sel = self.lb.ListCtrl.GetFirstSelected()
+            if sel >= 0:
+                strings = self.lb.GetStrings()
+                if sel < len(strings):
+                    strings[sel] = val
+                else:
+                    strings.append(val)
+                self.lb.SetStrings(strings)
 
         def _GetUpdatedData(self, data):
-            strings = self.ctrl.GetStrings()
+            strings = self.lb.GetStrings()
             values = list()
             for string in strings:
                 values.append(self.prop.type.parse_value(string))
