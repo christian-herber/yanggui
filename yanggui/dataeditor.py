@@ -16,6 +16,19 @@ def _AppendNodeToPath(path, iname):
     l.append(iname)
     return tuple(l)
 
+def _GetLeafRefChoices(property):
+    choices = ['']
+    values = [0]
+    d = property.env['dsrepo'].get_resource(property.path)
+    if d != None:
+        ns = property.type.path.evaluate(d)
+        for idx, obj in enumerate(ns):
+            choices.append(property.type.canonical_string(obj.value))
+            values.append(idx + 1)
+    
+        property.choices = choices
+    return choices, values
+
 def _CreateNodeLabel(node):
     # Create labels insipred by https://tools.ietf.org/html/rfc8340
     label = 'rw ' if node.config == True else 'ro '
@@ -152,13 +165,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             (yangson.datatype.IntegralType, YangPropertyGrid.YangIntegralProperty),
             (yangson.datatype.Decimal64Type, YangPropertyGrid.YangDecimal64Property),
             (yangson.datatype.EmptyType, YangPropertyGrid.YangEmptyProperty),
+            (yangson.datatype.LeafrefType, YangPropertyGrid.YangLeafrefProperty),
             (yangson.datatype.InstanceIdentifierType, YangPropertyGrid.YangGenericProperty)
         ]
 
         if isinstance(leaf.type, yangson.datatype.UnionType):
             nodeType = leaf.type.types[0]
-        elif isinstance(leaf.type, yangson.datatype.LeafrefType):
-            nodeType = leaf.type.ref_type
         else:
             nodeType = leaf.type
         for propClass in leafLookup:
@@ -175,6 +187,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             prop = YangPropertyGrid._CreateChildProperty(self, child)
             if prop != None:
                 self.AddPrivateChild(prop)
+                self.childProperties[child.iname()] = prop
 
     def _CreateChildProperty(self, child):
         prop = None
@@ -222,9 +235,10 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 
             if (property.env['southboundIf'] != None) and (property.env['southboundIf'].resources != None):
                 if property.schemaNode.data_path() in property.env['southboundIf'].resources:
-                    if property.schemaNode.config and dataValid:
-                        buttons.AddButton("P", id=self.PUT)
                     buttons.AddButton("G", id=self.GET)
+                    if dataValid:
+                        if property.schemaNode.config:
+                            buttons.AddButton("P", id=self.PUT)
             if dataValid:
                 buttons.AddButton("ADV", id=self.ADVANCED)
             wndList = super().CreateControls(
@@ -349,6 +363,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     self.Put(aProperty)
                 elif evtId == self.GET:
                     self.Get(aProperty)
+                    aProperty.RecreateEditor()
                 elif evtId == self.ADVANCED:
                     self.AdvancedMenu(aProperty)
                 return False
@@ -363,6 +378,9 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
         def Get(self, prop):
             if prop.env['southboundIf'] != None:
                 data = prop.env['dsrepo'].get_resource(prop.path)
+                if data == None:
+                    prop.Create()
+                    data = prop.env['dsrepo'].get_resource(prop.path)
                 data = prop.env['southboundIf'].get(prop.env['dsrepo'].dm, data, prop.path)
                 if data != None:
                     prop.env['dsrepo'].commit(data.top())
@@ -371,6 +389,13 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
         def __init__(self):
             wxpg.PGChoiceEditor.__init__(self)
             YangPropertyGrid.YangEditor.__init__(self)
+
+        def CreateControls(self, propGrid, property, pos, sz):
+            if isinstance(property.schemaNode.type, yangson.datatype.LeafrefType):
+                choices, values = _GetLeafRefChoices(property)
+                property.SetChoices(wxpg.PGChoices(choices, values))
+            wndList = super().CreateControls(propGrid, property, pos, sz)
+            return wndList
 
     class YangSpinCtrlEditor(YangEditor, wxpg.PGSpinCtrlEditor):
         def __init__(self):
@@ -485,16 +510,34 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             
     class YangLeafListDialog(YangEditorDialog):
         def _InitMainCtrl(self, data):
-            lb = wx.adv.EditableListBox(self)
+            sizer = wx.BoxSizer(wx.VERTICAL)
+            self.lb = lb = wx.adv.EditableListBox(self)
+            sizer.Add(lb)
+            if isinstance(self.prop.type, yangson.datatype.LeafrefType):
+                choices, values = _GetLeafRefChoices(self.prop)
+                self.cb = cb = wx.ComboBox(self, style=wx.CB_READONLY, choices=choices)
+                sizer.Add(cb, 0, wx.EXPAND)
+                cb.Bind(wx.EVT_COMBOBOX, self.OnCBSelect)
             strings = list()
             for value in data.value:
                 str = self.prop.type.canonical_string(value)
                 strings.append(str)
             lb.SetStrings(strings)
-            return lb
+            return sizer
+        
+        def OnCBSelect(self, e):
+            val = e.GetString()
+            sel = self.lb.ListCtrl.GetFirstSelected()
+            if sel >= 0:
+                strings = self.lb.GetStrings()
+                if sel < len(strings):
+                    strings[sel] = val
+                else:
+                    strings.append(val)
+                self.lb.SetStrings(strings)
 
         def _GetUpdatedData(self, data):
-            strings = self.ctrl.GetStrings()
+            strings = self.lb.GetStrings()
             values = list()
             for string in strings:
                 values.append(self.prop.type.parse_value(string))
@@ -655,7 +698,11 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 return obj
 
         def GetDefaultData(self):
-            return self._ParseInstDataFromValue(self.GetDefaultValue())
+            if hasattr(self.schemaNode, 'default') and self.schemaNode.default != None:
+                data = self.schemaNode.default
+            else:
+                data = self._ParseInstDataFromValue(self.GetDefaultValue())
+            return data
             
         def ConvertDataToObject(self, data):
             return data
@@ -721,12 +768,12 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return '0x{}'.format(data.value.hex())
         
     class YangStringProperty(YangLinearProperty):
-        def GetDefaultData(self):
+        def GetDefaultValue(self):
             if hasattr(self.type, 'patterns') and len(self.type.patterns) > 0:
-                data = rstr.xeger(self.type.patterns[0].regex)
+                value = rstr.xeger(self.type.patterns[0].regex)
             else:
-                data = rstr.rstr('x', self.minLength)
-            return data
+                value = rstr.rstr('x', self.minLength)
+            return value
         
         def _ParseInstDataFromValue(self, value):
             if value == "":
@@ -750,7 +797,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 if isinstance(self.type.range, yangson.constraint.Intervals):
                     self.default = self.type.range.intervals[0][0]
 
-        def GetDefaultData(self):
+        def GetDefaultValue(self):
             return self.default
         
     class YangChoiceProperty(wxpg.EnumProperty, YangPropertyBase):
@@ -768,7 +815,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 return super()._ParseInstDataFromValue(self.choices[value])
 
         def GetDefaultValue(self):
-            return 1
+            return 1 if len(self.choices) > 1 else 0
 
     class YangEnumerationProperty(YangChoiceProperty):
         def GetChoices(self, sntype):
@@ -781,6 +828,11 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 choices.append(sntype.canonical_string(choice))
             return choices
 
+    class YangLeafrefProperty(YangChoiceProperty):
+        def GetChoices(self, sntype):
+            choices = ['']
+            return choices
+
     class YangBooleanProperty(wxpg.BoolProperty, YangPropertyBase):
         def __init__(self, parent, sn, sntype):
             YangPropertyGrid.YangPropertyBase.SetNameAndLabel(self, sn)
@@ -789,7 +841,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             self.SetEditor("YangChoiceEditor")
             self.SetValueToUnspecified()
 
-        def GetDefaultData(self):
+        def GetDefaultValue(self):
             return False
 
         def _ParseInstDataFromValue(self, value):
@@ -812,8 +864,8 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return json.dumps(data.value)
 
     class YangDecimal64Property(YangGenericProperty):
-        def GetDefaultData(self):
-            return 0.0
+        def GetDefaultValue(self):
+            return "0.0"
 
     class YangInternalProperty(wxpg.StringProperty, YangPropertyBase):
         def __init__(self, parent, sn):
@@ -821,6 +873,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             super().__init__(label=self.label, name=self.name)
             YangPropertyGrid.YangPropertyBase.__init__(self, parent, sn, None)
             self._SetEditor()
+            self.childProperties = dict()
             YangPropertyGrid._AddChildrenToParentProperty(self, self.schemaNode.data_children())
             self.SetValueToUnspecified()
         
@@ -857,9 +910,20 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return True
         
         def _ConvertInstDataToValue(self, data):
-            value = str(data.value)
-            if len(value) > 100:
-                value = value[0:100].rsplit(',', 1)[0] + ' ...}'
+            if data != None:
+                value = '{'
+                for iname in data:
+                    child_value = self.childProperties[iname]._ConvertInstDataToValue(data[iname])
+                    value = '{}{}: {}, '.format(value, iname, child_value)
+                    if(len(value) > 100):
+                        break
+                if len(value) > 100:
+                    value = value[0:100].rsplit(',', 1)[0] + ' ...'
+                else:
+                    value = value.rsplit(',', 1)[0]
+                value = value + '}'
+            else:
+                value = ''
             return value
 
     class YangLeafListProperty(wxpg.StringProperty, YangPropertyBase):
@@ -926,7 +990,9 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             self.DisplayYangEntryInstData(data)
 
         def DisplayYangEntryInstData(self, data):
-            self.max_index = len(data.parinst.value) - 1
+            self.max_index = -1
+            if data != None:
+                self.max_index = len(data.parinst.value) - 1
             super().DisplayYangInstData(data)
             
         def DisplayYangInstData(self, data):
@@ -956,17 +1022,30 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return yangson.instvalue.ArrayValue(val=data)
         
         def ValidateValue(self, value, validationInfo):
-            path = self.path[0:-1] + (int(value), )
-            d = self.env['dsrepo'].get_resource(path)
-            if d != None:
-                self.Select(int(value))
-            else:
-                validationInfo.FailureMessage = 'List index out of bounds.'
-                return False
             return True
         
         def _ConvertInstDataToValue(self, data):
-            return self.index # just return the currently selected index to be displayed
+            if isinstance(data, yangson.instance.ArrayEntry):
+                return YangPropertyGrid.YangContainerProperty._ConvertInstDataToValue(self, data)
+            else:
+                if data == None:
+                    return ''
+                elif len(data.value) == 0:
+                    return '[]'
+                else:
+                    keys = data.schema_node.keys
+                    entries = list()
+                    indeces = set([0])
+                    indeces.add(len(data.value) - 1)
+                    for idx in indeces:
+                        keyvals = []
+                        for key in keys:
+                            keyvals.append(str(data[idx][key[0]].value))
+                        entry = '({})'.format(', '.join(keyvals))
+                        entries.append(entry)
+                    sep = ', ' if len(data.value) == 2 else ', ..., '
+                    value = '[{}]'.format(sep.join(entries))
+                return value
 
         def SetInitialPath(self):
             iname = self.schemaNode.iname()
@@ -977,6 +1056,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
 class YangListViewer(wx.Frame):
     def __init__(self, aProperty):
         self.property = aProperty
+        self.propertyGrid = aProperty.GetGrid()
         self.nodeParent = aProperty.parent
         self.schemaNode = aProperty.schemaNode
         self.env = aProperty.env
@@ -1029,16 +1109,10 @@ class YangListViewer(wx.Frame):
             path = self.parent.path + (item,)
             d = self.parent.env['dsrepo'].get_resource(path)
             if d != None:
-                if len(self.columns) == 1:
-                    value = str(d)
-                elif self.columns[column] in d:
+                if self.columns[column] in d:
                     obj = d[self.columns[column]]
-                    if isinstance(obj.schema_node, yangson.schemanode.LeafNode):
-                        value = str(obj)  # TODO use cannonical string
-                    elif isinstance(obj.schema_node, yangson.schemanode.SequenceNode):
-                        value = str((len(obj.value)))
-                    else:
-                        value = 'present'
+                    prop = self.parent.property.childProperties[obj.schema_node.iname()]
+                    value = str(prop._ConvertInstDataToValue(obj))
             return value
 
         def _OnSelectEvent(self, e):
@@ -1132,9 +1206,10 @@ class YangListViewer(wx.Frame):
                 updated = d.insert_before(value=value).top()
             else:
                 updated = d.insert_after(value=value).top()
+            self.property.max_index += 1
+            self.env['dsrepo'].commit(updated)
         else:
-            updated = self.property.Create()
-        self.env['dsrepo'].commit(updated)
+            self.property.Create()
 
     def _OnDeleteSelected(self, e):
         item = self.list.GetFirstSelected()
@@ -1145,6 +1220,8 @@ class YangListViewer(wx.Frame):
             item = self.list.GetNextSelected(item)
         for item in sorted(remove, reverse=True):
             updatedValue = updatedValue.delete_item(item)
+        self.property.max_index -= len(remove)
+        self.property.Select(self.property.index - 1)
         self.env['dsrepo'].commit(updatedValue.top())
 
     def RefreshInstData(self):
