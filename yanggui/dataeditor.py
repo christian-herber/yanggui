@@ -897,7 +897,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                     value = '{}{}: {}, '.format(value, iname, child_value)
                     if(len(value) > 100):
                         break
-                if(len(value) > 100):
+                if len(value) > 100:
                     value = value[0:100].rsplit(',', 1)[0] + ' ...'
                 else:
                     value = value.rsplit(',', 1)[0]
@@ -1002,13 +1002,6 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
             return yangson.instvalue.ArrayValue(val=data)
         
         def ValidateValue(self, value, validationInfo):
-            path = self.path[0:-1] + (int(value), )
-            d = self.env['dsrepo'].get_resource(path)
-            if d != None:
-                self.Select(int(value))
-            else:
-                validationInfo.FailureMessage = 'List index out of bounds.'
-                return False
             return True
         
         def _ConvertInstDataToValue(self, data):
