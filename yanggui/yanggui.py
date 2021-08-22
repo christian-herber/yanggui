@@ -46,7 +46,7 @@ class MainFrame(wx.Frame):
         
         self._InitUI()
 
-        self.config = wx.FileConfig(appName="YANG GUI", localFilename='.config', globalFilename=".config")
+        self.config = wx.FileConfig(appName=title)
         self.config.EnableAutoSave()
 
         self.includes = list()
@@ -63,7 +63,8 @@ class MainFrame(wx.Frame):
 
     def _InitUI(self):
         self.Maximize()
-        self.SetMenuBar(self.YangMenuBar(self))
+        self.menu = self.YangMenuBar(self)
+        self.SetMenuBar(self.menu)
 
     class YangMenuBar(wx.MenuBar):
         def __init__(self, parent):
@@ -104,6 +105,11 @@ class MainFrame(wx.Frame):
                             'helpString': 'Save YANG instance data',
                             'handler': self.parent._OnSaveData
                         },
+                        'Save Data As...': {
+                            'bmp': wx.ArtProvider.GetBitmap(wx.ART_FILE_SAVE),
+                            'helpString': 'Save YANG instance data as',
+                            'handler': self.parent._OnSaveDataAs
+                        },
                         'Load Data...': {
                             'bmp': wx.ArtProvider.GetBitmap(wx.ART_FILE_OPEN),
                             'helpString': 'Load YANG instance data',
@@ -138,6 +144,9 @@ class MainFrame(wx.Frame):
                     menuItem = menu.Append(wx.ID_ANY, item=item, helpString=opts['helpString'])
                     menuItem.SetBitmap(opts['bmp'])
                     menu.Bind(wx.EVT_MENU, opts['handler'], menuItem)
+                    if item == 'Save Data':
+                        menuItem.Enable(False)
+                        self.itemSaveData = menuItem
 
     def _LoadConfig(self):
         includeFile = self.config.Read("YANG Includes")
@@ -148,7 +157,8 @@ class MainFrame(wx.Frame):
                 self._LoadLibrary(libraryFile)
                 if self.dm != None:
                     dataFile = self.config.Read("YANG Data Instance")
-                    self._LoadData(dataFile)
+                    if dataFile != '':
+                        self._LoadData(dataFile)
 
     def _LoadIncludes(self, includeFile):
         with open(includeFile, 'r') as f:
@@ -183,6 +193,8 @@ class MainFrame(wx.Frame):
         except:
             print("Failed to load data from {}".format(dataFile))
             self.dsrepo.load_raw({})
+        else:
+            self.menu.itemSaveData.Enable()
 
     def _OnDiffData(self, e):
         diff = self.dsrepo.diff()
@@ -217,6 +229,23 @@ class MainFrame(wx.Frame):
     def _OnSaveData(self, e):
         dataFile = self.config.Read("YANG Data Instance")
         self.dsrepo.save(dataFile)
+
+    def _OnSaveDataAs(self, e):
+        dataFile = self.config.Read("YANG Data Instance")
+        if dataFile == '':
+            defaultDir = ''
+        else:
+            defaultDir = os.path.dirname(dataFile)
+        frame = wx.Frame(None, -1, 'Import YANG instance data')
+        fileDialog = wx.FileDialog(frame, message="Save As", defaultDir=defaultDir, defaultFile="yang-data.json", wildcard="YANG data files (*.json)|*.json", style=wx.FD_SAVE)
+        fileDialog.ShowModal()
+        dataFile = fileDialog.GetPath()
+        if dataFile != '':
+            self.config.Write("YANG Data Instance", dataFile)
+            self.dsrepo.save(dataFile)
+            self.menu.itemSaveData.Enable()            
+        fileDialog.Destroy()
+        frame.Destroy()
 
     def _OnLoadIncludes(self, e):
         frame = wx.Frame(None, -1, 'Import include paths')
