@@ -773,7 +773,7 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
                 value = rstr.xeger(self.type.patterns[0].regex)
             else:
                 value = rstr.rstr('x', self.minLength)
-            return value
+            return "\"{}\"".format(value)
         
         def _ParseInstDataFromValue(self, value):
             if value == "":
