@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 import rstr
+import re
 import json
 import wx
 import wx.lib.scrolledpanel
@@ -766,15 +767,21 @@ class YangPropertyGrid(wxpg.PropertyGridManager):
 
         def _ConvertInstDataToValue(self, data):
             return '0x{}'.format(data.value.hex())
-        
+
     class YangStringProperty(YangLinearProperty):
         def GetDefaultValue(self):
             if hasattr(self.type, 'patterns') and len(self.type.patterns) > 0:
-                value = rstr.xeger(self.type.patterns[0].regex)
+                no_match = True
+                while (no_match):
+                    value = rstr.xeger(self.type.patterns[0].regex)
+                    no_match = False
+                    for pattern in self.type.patterns:
+                        if not re.compile(pattern.regex).match(value):
+                            no_match = True                            
             else:
                 value = rstr.rstr('x', self.minLength)
             return "\"{}\"".format(value)
-        
+
         def _ParseInstDataFromValue(self, value):
             if value == "":
                 data = None

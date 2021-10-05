@@ -10,6 +10,8 @@ import wx.adv
 import wx.html2
 import yangson
 
+from pubsub import pub
+
 from .dsrepo import DataStoreRepo
 from .errorlog import ErrorLog
 from .dataeditor import YangPropertyGrid
@@ -177,6 +179,7 @@ class MainFrame(wx.Frame):
             print("Error while loading the YANG library. Exception: {} - {}".format(str(e), type(e)))
         else:
             print('Loaded Yang Library from {}'.format(libraryFile))
+            pub.unsubAll()
             self.dsrepo = DataStoreRepo(self.dm)
             if self.graphViewer == None:
                 self.graphViewer = GraphViewer(self.utilsBook, self.dsrepo, self.southboundIf)
