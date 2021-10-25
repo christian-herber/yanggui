@@ -44,16 +44,25 @@ class GraphViewer(wx.Panel):
         self.max_samples = 100 # to ensure stability, only plot a maximum of this number of samples
         self.max_age = self.interval * self.max_samples / 1000 # [s] if data points are older than this, drop them
         self.latest_sample = 0
+        self.time_base = 0
 
     def set_editor(self, editor):
         self.editor = editor
 
+    def set_time_base(self, timestamp):
+        self.time_base = timestamp
+
+    def get_timestamp(self, data):
+        if self.time_base == 0:
+            self.set_time_base(data.timestamp.timestamp())
+        return data.timestamp.timestamp() - self.time_base
+
     def value_change_cb(self, data):
         for plot in self.datasources:
             if plot['path'] == data.path:
-                plot['data'].append((data.timestamp.timestamp(), data.value))
-                if data.timestamp.timestamp() > self.latest_sample:
-                    self.latest_sample = data.timestamp.timestamp()
+                plot['data'].append((self.get_timestamp(data), data.value))
+                if self.get_timestamp(data) > self.latest_sample:
+                    self.latest_sample = self.get_timestamp(data)
                 break
         self.canvas.Draw(self.draw())
         
