@@ -10,6 +10,8 @@ import wx.adv
 import wx.html2
 import yangson
 
+from importlib_metadata import version
+
 from pubsub import pub
 
 from .dsrepo import DataStoreRepo
@@ -273,7 +275,10 @@ class MainFrame(wx.Frame):
         info = wx.adv.AboutDialogInfo()
 
         info.SetName('YANG GUI')
-        info.SetVersion('0.0')
+        try:
+            info.SetVersion(version('yanggui'))
+        except:
+            pass
         info.SetDescription(description)
         info.SetCopyright('(C) 2020-2021 Christian Herber')
         info.AddDeveloper('Christian Herber')
